@@ -1,0 +1,512 @@
+<!-- N.E. Frick, 2017,  MIT License -->
+<!--   QND template and JS, version 0.11, Vue template later  -->
+
+<!--  ( see usage heuristic at end ) -->
+
+
+
+<template id="dwgview-template">
+    <div>
+  <svg  
+        :width="vwWidth" 
+       :height="vwHeight" 
+       @mousemove="svgEventCursorMove($event)" 
+       >
+        <!-- the bounding rectangle -->
+
+      <rect x="1" y="1" :width="(vwWidth-1)" :height="(vwHeight-1)" :stroke="vColor" fill="none" ></rect>
+       <defs v-html="defsHtml">
+       <!-- <linearGradient id="sky2tan" x1="0" y1="0" x2="1" y2="0.5">
+          <stop offset="15%" stop-color="slateblue" />
+          <stop offset="85%" stop-color="tan" />
+        </linearGradient> -->
+      </defs>
+       <!-- the drawing! -->
+      <g v-for="item in entities" v-if="gDrawn(item.layer)"
+         @eclick="clicked(item,$event)"
+          :is="item.entity"  
+          :x="item.x"
+          :y="item.y"
+          :height="item.height"
+          :window-y="vwHeight-1"
+          :width="item.width"
+          :stroke="gColor(item.strokeColor,item.layer)" 
+          :stroke-width="item.strokeWidth" 
+          :fill="gFill(item.entity,item.layer,item.color)"
+          :opacity="gOpacity(item.opacity,item.layer)" 
+          :ucs-scale="vScale" 
+          :ucs-origin-x="vOriginX" 
+          :ucs-origin-y="vOriginY"
+          :points="item.points"
+          :src="item.src"
+          :content="item.content"
+          :font-family="item.fontFamily"
+          :font-size="item.fontSize"
+          :selectable="item.selectable" >  </g>
+          
+  </svg>
+    <!-- TODO: layer controls -->
+  <!-- <button @click="layers[0].on =!layers[0].on">Toggle layer 0</button> -->
+    <!-- TODO: better cursor info -->
+  <p>{{cursorX}},{{cursorY}}  Scale:{{vScale.toFixed(2)}} O:{{vOriginX.toFixed(2)}},{{vOriginY.toFixed(2)}}  </p>
+  </div>
+</template>
+
+
+<script>
+
+// NOTE the simple scaling transformation of X' = ( X - originX ) * scaleX ... same for Y 
+
+      Vue.component("dwgview", {
+        template:'#dwgview-template'
+        ,data: function () { return { cursorX:0,cursorY:0,vScale:1.0,vOriginX:0,vOriginY:0 }; }  
+        ,props: {  vwWidth: {default:1800}
+                   ,vwHeight: {default:1400}
+                   ,vColor: {type:String,default:'red'}
+                   ,ivScale: {type:Number,default:1.0}
+                   ,ivOriginX: {type:Number,default:0}
+                   ,ivOriginY: {type:Number,default:0}
+                   ,entities: {type:Array,
+                     default:function() { 
+                       return [ {entity:"svg-polygon"
+                                 ,dwgId:"poly1"
+                                 ,points:[{x:100,y:10},{x:140,y:198},{x:290,y:78},{x:10,y:78},{x:160,y:198}]
+                                 ,layerId:0
+                                 ,color:'red'
+                                 ,strokeColor:'gray'
+                                 ,opacity:0.25}] }}
+                   ,layers: {type:Object,
+                     default:function() { 
+                       return { background:{
+                                 name:'background'
+                                 ,color:'black'
+                                 ,opacity:0.75
+                                 ,on:true
+                                 ,frozen:false
+                                 ,locked:false}
+                               } 
+                               }}
+                   ,gradients: {type:Array,
+                     default:function() { 
+                       return [ {url:"sky2tan",colors:[{color:'skyblue',offset:'0%'},{color:'tan',offset:'100%'}]  }];
+                     }}
+               }
+        ,computed: { defsHtml : function() {
+           var rs = '';
+           var gradl = this.gradients.length;
+           for (var i=0;i<gradl;i++) if (this.gradients[i].colors) {
+             var ss = '<linearGradient id="' + this.gradients[i].url + '"  x1="0" y1="0" x2="1" y2="0.5">';
+             var cll = this.gradients[i].colors.length;
+             for (var ci=0;ci<cll;ci++) if ((this.gradients[i].colors[ci].offset) && (this.gradients[i].colors[ci].color)) {
+                ss += '<stop offset="' + this.gradients[i].colors[ci].offset + '" stop-color="'+ this.gradients[i].colors[ci].color + '" />';
+             }
+             ss += ' </linearGradient>';
+             rs += ss;
+           }
+           return rs;
+         }
+
+        }
+        ,methods: { 
+        clicked: function(dwgElem,evnt) {
+          var mcx = evnt.offsetX;
+          var mcy = evnt.offsetY;
+          dwgElem.offsetX = mcx;
+          dwgElem.offsetY = mcy;
+          this.$emit('eselected',dwgElem);
+          
+        }
+        ,svgEventCursorMove: function(e) {
+          //console.dir(e)
+          // this.cursorX = Math.round(e.clientX - this.svgDOMX);
+          // this.cursorY = Math.round(e.clientY - this.svgDOMY);
+          this.cursorX = e.offsetX.toFixed(0);
+          this.cursorY = e.offsetY.toFixed(0);
+        }
+        ,svgEventDrop: function(e) {
+          // TODO
+          console.log(e);
+        }
+
+        // ,svgEventWheel: function(e) { var beta = 1.1; 
+        //   var cX = this.cursorX;
+        //   var cY = this.cursorY;
+        //   var gs = this.vScale;
+        //  if (e.deltaY > 0) beta =  1 / beta;
+        //  if (e.deltaY != 0) {
+        //     this.vScale *= beta;
+        //     this.vOriginX += (beta-1)/(beta*gs) * cX;
+        //     this.vOriginY += (beta-1)/(beta*gs) * cY;
+        //     }
+        // }
+        ,gDrawn: function(itmLayer) { 
+          var shown = true;
+          if ((this.layers[itmLayer]) && (!this.layers[itmLayer].on))
+                 shown = false;
+          return shown;
+        }
+        ,gColor: function(iC,itmLayer) {
+          var rV ;
+          if (iC) {
+            rV = iC;    
+          } else
+          { if (this.layers[itmLayer]) rV = this.layers[itmLayer].color;
+          }
+          if (!rV) rV = 'black';
+            return rV;
+        }
+        ,gFill: function(eNm,eLyr,eClr) {
+         
+          var rV;
+          if (eNm == 'svg-path')
+            rV = 'none';
+          else
+          { rV = null;
+            if (eClr) {
+              rV = eClr;    
+            } else
+            { if (this.layers[eLyr]) rV = this.layers[eLyr].color;
+              
+            }
+          }
+          if (!rV) rV = 'black';
+          return rV;
+        }
+        ,gOpacity: function(iC,itmLayer) {
+          var rV;
+          if (iC) {
+            rV = iC;    
+          } else
+          { if (this.layers[itmLayer]) rV = this.layers[itmLayer].opacity;
+          }
+          if (!rV) rV = 0.75;
+          return rV;
+        }
+        }
+        ,mounted: function() { 
+          this.vOriginX = this.ivOriginX; 
+          this.vOriginY = this.ivOriginY; 
+          this.vScale = this.ivScale; 
+
+           }
+        
+        }); 
+
+
+      Vue.component("svg-path", {  
+          props: { stroke: {type:String,default:'gray'}
+                   ,strokeWidth: {type:Number,default:2.5}
+                   ,selectable: {type:Boolean,default:true}
+                   ,fill: {type:String,default:'none'}
+                   ,opacity: {type:Number,default:0.25}
+                   ,ucsScale: {type:Number,default:1.0}
+                   ,ucsOriginX: {type:Number,default:0.0}
+                   ,ucsOriginY: {type:Number,default:0.0}
+                   ,windowY: {type:Number,default:400}
+                   ,points:{type:Array,default:function () { return [{x:100,y:10},{x:40,y:198},{x:190,y:78},{x:10,y:78},{x:160,y:198}];} } // array of objects
+           }       
+           ,methods: { eclick: function(e) {
+               if (this.selectable) this.$emit('eclick',e)
+             }
+             
+           }
+           ,computed: {
+             styleStr: function () {
+               var pStr = 'fill:none;';//path
+               if (this.opacity < 1.0) pStr += 'opacity:' + this.opacity.toFixed(2) + ';'; 
+               if (this.stroke.length) pStr += 'stroke:' + this.stroke + ';'; 
+               if (this.strokeWidth > 0) pStr += 'stroke-width:' + this.strokeWidth + ';';
+               
+               return pStr; 
+             }
+             ,transformStr: function () {
+                return '';
+             }
+             ,pointsStrM: function () {
+               var pStr = ''; var pac = 'M '; 
+               for (var i=0;i<this.points.length;i++,pac='L ') 
+               if (this.points[i])
+               { 
+                 pStr += pac + ((this.points[i].x-this.ucsOriginX) * this.ucsScale).toFixed(0) + ',' 
+                       + (this.windowY-((this.points[i].y-this.ucsOriginY) * this.ucsScale)).toFixed(0) + ' ';
+               }
+               
+               return pStr  + " "; 
+             }
+        }     
+        ,template: `<path @click="eclick" :d="pointsStrM" :style="styleStr" />`
+      });
+
+      Vue.component("svg-polygon", {  
+          props: { stroke: {type:String,default:'gray'}
+                   ,strokeWidth: {type:Number,default:1}
+                   ,selectable: {type:Boolean,default:true}
+                   ,fill: {type:String,default:'black'}
+                   ,opacity: {type:Number,default:0.25}
+                   ,ucsScale: {type:Number,default:1.0}
+                   ,ucsOriginX: {type:Number,default:0.0}
+                   ,ucsOriginY: {type:Number,default:0.0}
+                   ,windowY: {type:Number,default:400}
+                   ,points:{type:Array,default:function () { return [{x:100,y:10},{x:40,y:198},{x:190,y:78},{x:10,y:78},{x:160,y:198}];} } // array of objects
+           }       
+           ,methods: { eclick: function(e) {
+               if (this.selectable) this.$emit('eclick',e)
+             }
+             
+           }
+           ,computed: {
+             styleStr: function () {
+               var pStr = ''; 
+               if (this.opacity < 1.0) pStr += 'opacity:' + this.opacity.toFixed(2) + ';'; 
+               if (this.stroke.length) pStr += 'stroke:' + this.stroke + ';'; 
+               if (this.strokeWidth > 0) pStr += 'stroke-width:' + this.strokeWidth + ';';
+               if (this.fill.length) pStr += 'fill:' + this.fill + ';'; 
+               return pStr; 
+             }
+             ,transformStr: function () {
+                return '';
+             }
+             ,pointsStr: function () {
+               var pStr = ''; 
+               for (var i=0;i<this.points.length;i++) 
+               if (this.points[i])
+               {
+                 pStr += ((this.points[i].x-this.ucsOriginX) * this.ucsScale).toFixed(0) + ',' 
+                       + (this.windowY-((this.points[i].y-this.ucsOriginY) * this.ucsScale)).toFixed(0) + ' ';
+               }
+               return pStr; 
+             }
+        }     
+        ,template: `<polygon @click="eclick" :points="pointsStr" :style="styleStr" />`
+      });
+
+      Vue.component("svg-image", {  
+          props: { src: {type:String,required:true}
+                   ,selectable: {type:Boolean,default:true}
+                   ,x: {default:"1"}
+                   ,y: {default:"1"}
+                   ,width: {default:"100"}
+                   ,height: {default:"100"}
+                   ,opacity: {type:Number,default:0.5}
+                   ,ucsScale: {type:Number,default:1.0}
+                   ,ucsOriginX: {type:Number,default:0.0}
+                   ,ucsOriginY: {type:Number,default:0.0}
+                   ,windowY: {type:Number,default:400}
+                   
+           }       
+           ,methods: { eclick: function(e) {
+               if (this.selectable) this.$emit('eclick',e)
+             }
+             
+           }
+           ,computed: {
+             widthStr: function () {
+               var pStr = (this.width * this.ucsScale).toFixed(0);
+               return pStr;
+             }
+             ,heightStr: function () {
+               var pStr = (this.height * this.ucsScale).toFixed(0);
+               return pStr;
+             }
+             ,xStr: function () {
+               var pStr = ((parseInt(this.x) - this.ucsOriginX)*this.ucsScale).toFixed(0);
+               return pStr;
+             }
+             ,yStr: function () {
+               var pStr = (((parseInt(this.y) - this.ucsOriginY)*this.ucsScale)).toFixed(0);
+               return pStr;
+             }
+             ,heightStr: function () {
+               var pStr = (this.height * this.ucsScale).toFixed(0);
+               return pStr;
+             }
+             ,styleStr: function () {
+               var pStr = ''; 
+               if (this.opacity < 1.0) pStr += 'opacity:' + this.opacity.toFixed(2) + ';'; 
+               return pStr; 
+             }
+        }     
+        ,template: `<image @click="eclick" :x="xStr" :y="yStr" :width="widthStr" :height="heightStr" :xlink:href="src"  :style="styleStr"/>`
+      });
+
+
+       
+      Vue.component("svg-text", {  
+          props: { x: {default:"1"}
+                   ,y: {default:"1"}
+                   ,selectable: {type:Boolean,default:true}
+                   ,transform: {type:String,default:null}
+                   ,fill: {type:String,default:null}
+                   ,opacity: {type:Number,default:0.5}
+                   ,ucsScale: {type:Number,default:1.0}
+                   ,ucsOriginX: {type:Number,default:0.0}
+                   ,ucsOriginY: {type:Number,default:0.0}
+                   ,content: {type:String,default:''}
+                   ,fontFamily: {type:String,default:"Verdana"}
+                   ,fontSize: {default:"18"}
+                   
+           }       
+           ,methods: { eclick: function(e) {
+               if (this.selectable) this.$emit('eclick',e)
+             }
+             
+           }
+           ,computed: {
+             fontFamilyStr: function () {
+               var pStr = this.fontFamily;
+               return pStr;
+             }
+             ,fontSizeStr: function () {
+               var pStr = (this.fontSize * this.ucsScale).toFixed(2);
+               return pStr;
+             }
+             ,xStr: function () {
+               var pStr = ((parseInt(this.x) - this.ucsOriginX)*this.ucsScale).toFixed(0);
+               return pStr;
+             }
+             ,yStr: function () {
+               var pStr = (((parseInt(this.y) - this.ucsOriginY)*this.ucsScale)).toFixed(0);
+               return pStr;
+             }
+             ,styleStr: function () {
+               var pStr = ''; 
+               if (this.opacity < 1.0) pStr += 'opacity:' + this.opacity.toFixed(2) + ';'; 
+               return pStr; 
+             }
+             ,transformStr: function () {
+               var pStr = null;
+               if (this.transform) pStr = this.transform;
+               return pStr; 
+             }
+             ,fillStr: function () { var pStr = '';
+               if (this.fill) 
+                 var pStr = this.fill; 
+
+               return pStr; 
+             }
+        } 
+        ,mounted: function () {
+          
+        }    
+        ,template: `<text @click="eclick" :x="xStr" :y="yStr"
+         :font-family="fontFamilyStr" 
+         :font-size="fontSizeStr"
+         :transform="transformStr"
+         :fill="fillStr" 
+         :style="styleStr">{{content}}</text>`
+      });
+
+
+       
+
+
+
+
+
+</script>
+
+
+
+
+
+<!-- USAGE example below ... modify before use -->
+
+
+
+<dwgview  key="view1.dwgId" :entities="view1.ENTITIES" @eselected="handleEntitySelected" :vw-width="view1.width" :vw-height="view1.height" :layers="layers1" :gradients="gradientAry"></dwgview>
+
+<script>
+    var vm1 = new Vue({ el: '#vueApp'
+
+        ,data: { 
+             currentOpacity:0.75
+             ,globalOriginX:10
+             ,globalOriginY:10
+             ,globalScale:1.0
+             ,addMode:true
+             ,deleteMode:false
+             ,pickDeleteMode:false
+             ,pickEditMode:false
+             ,editMode:false
+             ,patternAry:[] // data from server
+             
+             ,gradientAry: [ {url:'5072',colors:[{color:'red',offset:'0%'},{color:'chocolate',offset:'100%'}] }]
+             
+             
+           ,layers1: {
+             background:{name:'background',color:'black',opacity:0.75,on:true,frozen:false,locked:false}
+             ,invisible:{name:'invisible',color:'black',opacity:1.0,on:false,frozen:false,locked:false}
+             ,wp1:{name:'wp1',color:'red',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp2:{name:'wp2',color:'green',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp3:{name:'wp3',color:'blue',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp4:{name:'wp4',color:'chocolate',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp5:{name:'wp5',color:'pink',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp6:{name:'wp6',color:'olivedrab',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp7:{name:'wp7',color:'lightblue',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp8:{name:'wp8',color:'chocolate',opacity:0.75,on:true,frozen:false,locked:false}
+             ,wp9:{name:'wp9',color:'violet',opacity:0.75,on:true,frozen:false,locked:false}
+              }
+           
+                  
+            }
+            ,computed: { 
+ view1: function () { var rsAll = [];
+                  
+                    var rsObj = {}; // global attributes
+                    rsObj.width = 1024;
+                    rsObj.height = 800;
+                    rsObj.dwgId = 'image1';
+                    var rs = []; // entity list start
+                    var owk = {}; 
+                    owk.entity = 'svg-image';
+                    owk.dwgId = rsObj.dwgId;
+                    owk.layer = 'background';
+                    owk.src = '../floorplans/1.PNG';
+                    owk.width = 1024;
+                    owk.height = 800;
+                    rs.push(owk);
+                    
+                    // now, the shapes with fill
+                    var ll = this.patternAry.length;
+                    for (var j=0;j<ll;j++)  {
+                      
+                      var curLayer = (this.patternAry[j].LAYERNAME);
+                     
+                      if (!curLayer) curLayer = 'wp1'; // fallback
+                      var curColor = 'steelblue';
+                      if (this.patternAry[j].COLOR)
+                        curColor = this.patternAry[j].COLOR;
+                      else if (this.layers1[curLayer].color)
+                        curColor = this.layers1[curLayer].color;
+                      if (!curColor) curColor = 'steelblue'; //fallback 
+                      
+                      var b = this.patternAry[j].CARY.map(function (currentValue) {  // Y axis direction
+                         return ({ x:currentValue.X, y:(rsObj.height-currentValue.Y)});
+                      });
+                      
+                      var found = (b && b.length);
+	                      if (found) {
+		                      var ow2 = {};	// the numbers, centered on room coords
+		                      ow2.layer = curLayer;
+		                      ow2.dwgId = 'poly-'  + j;
+		                      ow2.entity = 'svg-polygon';
+		                      ow2.color = curColor;
+                          ow2.strokeColor = ow2.color;
+		                      ow2.opacity = 0.45;
+		                      ow2.points = b;
+                          ow2.AREAIDD = this.patternAry[j].AREAIDD;
+                          
+		                      rs.push(ow2);
+	                      }
+                      
+                    }
+                    rsObj.ENTITIES = rs;
+                    rsAll.push(rsObj);
+                  }
+                  return rsAll;
+            	}
+              .
+              .
+              .
+
+
