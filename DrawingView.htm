@@ -509,4 +509,40 @@
               .
               .
 
+           ,handleEntitySelected: function(entityObj) {
+              //console.log(entityObj);
+              if (entityObj.offsetX) {
+                var kx = entityObj.offsetX;
+                var ky = entityObj.offsetY;
+                var cI = -1; // find closest room to kx,ky
+                var dst = 99e99;
+                var i=0;
+                if (entityObj.dwgId) {
+                  var wkAry = entityObj.dwgId.split('e');//image0
+                  var ji = parseInt(wkAry[1]);
+                  if (ji >= 0) i = ji;
+                }
+                
+                var ctrs = this.fpAry[i].BARY;  // (data from AJAX request, use your own scheme here)
 
+                var llc = ctrs.length;
+                for (var jc=0;jc<llc;jc++) {  
+                	var dx = (ctrs[jc].XC - kx);
+                	var dy = (ctrs[jc].YC - ky);
+                    if (dst > (dx*dx + dy*dy)) {
+                      dst = (dx*dx + dy*dy); cI = jc;	
+                    }}
+                    
+                if (cI >= 0) { // we found it, send up to server first
+                	console.log('cI='+ cI);
+                  this.sendRoutePoint(ctrs[cI].IDD); 
+                }
+              }
+
+            }
+
+		       .
+		       .
+		       .
+		       
+		       
