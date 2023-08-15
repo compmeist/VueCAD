@@ -22,7 +22,7 @@
         </linearGradient> -->
       </defs>
        <!-- the drawing! -->
-      <g v-for="item in entities" v-if="gDrawn(item.layer)"
+      <g v-for="item in entities" v-if="gDrawn(item.layer)" :key="item.dwgId"
          @eclick="clicked(item,$event)"
           :is="item.entity"  
           :x="item.x"
@@ -413,7 +413,7 @@
 
 
 
-<dwgview  key="view1.dwgId" :entities="view1.ENTITIES" @eselected="handleEntitySelected" :vw-width="view1.width" :vw-height="view1.height" :layers="layers1" :gradients="gradientAry"></dwgview>
+<dwgview   :entities="view1.ENTITIES" @eselected="handleEntitySelected" vw-width="800" vw-height=600" :layers="layers1" :gradients="gradientAry"></dwgview>
 
 <script>
     var vm1 = new Vue({ el: '#vueApp'
